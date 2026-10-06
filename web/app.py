@@ -59,12 +59,11 @@ async def create_link(body: CreateLink):
 @app.api_route("/{code}", methods=["GET", "HEAD"])
 async def redirect(code: str):
     cache_key = f"link:{code}"
-
-    # 1. 先查 Redis（cache hit）
     target = await app.state.cache.get(cache_key)
+    cache_status = "HIT"
 
-    # 2. 沒有就查 PostgreSQL，再回填快取
     if target is None:
+        cache_status = "MISS"
         target = await app.state.db.fetchval(
             "SELECT target_url FROM links WHERE code = $1", code
         )
@@ -72,9 +71,10 @@ async def redirect(code: str):
             raise HTTPException(404, "短碼不存在")
         await app.state.cache.set(cache_key, target, ex=CACHE_TTL)
 
-    # 3. 點擊數用 Redis 累加，不每次寫 DB
     await app.state.cache.incr(f"hits:{code}")
-    return RedirectResponse(target, status_code=302)
+    return RedirectResponse(
+        target, status_code=302, headers={"X-Cache": cache_status}
+    )
 
 
 @app.get("/links/{code}/stats")
