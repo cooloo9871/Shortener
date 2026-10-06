@@ -1,5 +1,9 @@
 # URL Shortener（FastAPI + PostgreSQL + Redis）
 ## 下載
+```
+git clone https://github.com/cooloo9871/Shortener.git; cd Shortener
+```
+
 ## 啟動
 ```bash
 cp .env.example .env            # 修改 DB_PASSWORD，並同步更新 secrets/db_password.txt
