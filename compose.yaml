@@ -1,0 +1,77 @@
+name: shortener
+
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  web:
+    <<: *common
+    build:
+      context: ./web
+    image: shortener/web:${APP_VERSION:-dev}
+    environment:
+      DB_DSN: postgresql://app:${DB_PASSWORD}@db:5432/shortener
+      REDIS_URL: redis://cache:6379/0
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      db: { condition: service_healthy }
+      cache: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8080/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 256M }
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    networks: [frontend, backend]
+
+  db:
+    <<: *common
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_DB: shortener
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d shortener"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [backend]
+
+  cache:
+    <<: *common
+    image: redis:7.4-alpine
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [backend]
+
+volumes:
+  db_data:
+
+networks:
+  frontend:
+  backend:
+    internal: true
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
