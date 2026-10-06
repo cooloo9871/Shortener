@@ -56,7 +56,7 @@ async def create_link(body: CreateLink):
     return {"code": code, "short_url": f"{BASE_URL}/{code}", "target_url": str(body.url)}
 
 
-@app.get("/{code}")
+@app.api_route("/{code}", methods=["GET", "HEAD"])
 async def redirect(code: str):
     cache_key = f"link:{code}"
 
